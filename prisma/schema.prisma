@@ -1,0 +1,216 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum AssessmentStatus {
+  IN_PROGRESS
+  COMPLETED
+  ABANDONED
+}
+
+enum ReportJobStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
+enum PaymentStatus {
+  CREATED
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum EntitlementStatus {
+  ACTIVE
+  REVOKED
+}
+
+model QuizDefinition {
+  id          String   @id @default(cuid())
+  slug        String
+  version     Int
+  title       String
+  description String
+  isActive    Boolean  @default(false)
+  questions   Json
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  sessions AssessmentSession[]
+
+  @@unique([slug, version])
+  @@index([isActive])
+}
+
+model AssessmentSession {
+  id              String           @id @default(cuid())
+  anonymousToken  String           @unique
+  quizDefinitionId String
+  quizVersion     Int
+  status          AssessmentStatus @default(IN_PROGRESS)
+  currentStep     Int              @default(0)
+  completedAt     DateTime?
+  previewUnlocked Boolean          @default(false)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  quizDefinition QuizDefinition    @relation(fields: [quizDefinitionId], references: [id])
+  answers        AssessmentAnswer[]
+  profile        AssessmentProfile?
+  reportJobs     ReportJob[]
+  results        AssessmentResult[]
+  payments       Payment[]
+  entitlements   Entitlement[]
+  events         FunnelEvent[]
+
+  @@index([status, updatedAt])
+}
+
+model AssessmentAnswer {
+  id        String   @id @default(cuid())
+  sessionId String
+  questionId String
+  value     Json
+  chapter   String
+  answeredAt DateTime @default(now())
+
+  session AssessmentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, questionId])
+  @@index([questionId])
+}
+
+model AssessmentProfile {
+  id              String   @id @default(cuid())
+  sessionId       String   @unique
+  signals         Json
+  scores          Json
+  riskFlags       Json
+  planConstraints Json
+  preview         Json
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  session AssessmentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+}
+
+model ReportJob {
+  id        String          @id @default(cuid())
+  sessionId String
+  status    ReportJobStatus @default(PENDING)
+  progress  Int             @default(0)
+  stage     String          @default("queued")
+  error     String?
+  startedAt DateTime?
+  finishedAt DateTime?
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  session   AssessmentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  logs      AgentLog[]
+  artifacts ReportArtifact[]
+  results   AssessmentResult[]
+
+  @@index([status, createdAt])
+}
+
+model AgentLog {
+  id        String   @id @default(cuid())
+  jobId     String
+  stage     String
+  message   String
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  job ReportJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId, createdAt])
+}
+
+model ReportArtifact {
+  id        String   @id @default(cuid())
+  jobId     String
+  type      String
+  version   Int
+  payload   Json
+  createdAt DateTime @default(now())
+
+  job ReportJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId, type])
+}
+
+model AssessmentResult {
+  id             String   @id @default(cuid())
+  sessionId      String
+  reportJobId    String?
+  previewPayload Json
+  fullPayload    Json
+  safetyPayload  Json
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  session AssessmentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  reportJob ReportJob? @relation(fields: [reportJobId], references: [id])
+
+  @@index([sessionId, createdAt])
+}
+
+model Payment {
+  id         String        @id @default(cuid())
+  sessionId  String
+  provider   String        @default("mock")
+  providerRef String       @unique
+  amountCents Int
+  currency   String        @default("USD")
+  status     PaymentStatus @default(CREATED)
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  session AssessmentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+}
+
+model Entitlement {
+  id        String            @id @default(cuid())
+  sessionId String
+  scope     String
+  status    EntitlementStatus @default(ACTIVE)
+  startsAt  DateTime          @default(now())
+  endsAt    DateTime?
+  createdAt DateTime          @default(now())
+
+  session AssessmentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, scope])
+  @@index([scope, status])
+}
+
+model FunnelEvent {
+  id        String   @id @default(cuid())
+  sessionId String?
+  type      String
+  payload   Json
+  createdAt DateTime @default(now())
+
+  session AssessmentSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+
+  @@index([sessionId, createdAt])
+  @@index([type, createdAt])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actor     String
+  action    String
+  target    String
+  payload   Json
+  createdAt DateTime @default(now())
+
+  @@index([action, createdAt])
+}
