@@ -1,10 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import Rive, { Alignment, Fit, Layout } from "@rive-app/react-canvas";
 import type { AnswerValue, QuizDefinitionContract, QuizQuestion } from "@/lib/contracts";
 import { chapterLabels, chapterOrder, localizedQuizzes } from "@/lib/quiz-definition";
 import type { Locale } from "@/lib/locale";
+import {
+  EXERCISES,
+  MUSCLE_GROUPS,
+  exerciseLabel,
+  isContraindicated,
+  pickTwinSequence,
+  type Exercise,
+  type MuscleGroup
+} from "@/lib/exercise-catalog";
 
 type ReportJobView = {
   id: string;
@@ -135,6 +144,19 @@ const copy = {
     profileLabel: "Current profile",
     setup: "Setup",
     setupPending: "Setup pending",
+    atlasTitle: "Exercise atlas",
+    atlasSubtitle: "Your Health Twin can demonstrate every movement in the library — filtered to skip anything you need to protect.",
+    atlasMovements: "movements",
+    atlasSafeHidden: "hidden for your safety",
+    liveDemo: "Live demo",
+    groupAll: "All",
+    groupChest: "Chest",
+    groupBack: "Back",
+    groupLegs: "Legs",
+    groupShoulders: "Shoulders",
+    groupArms: "Arms",
+    groupCore: "Core",
+    groupCardio: "Cardio",
     wellnessProfile: "Wellness profile",
     readiness: "Readiness",
     consistency: "Consistency",
@@ -224,6 +246,19 @@ const copy = {
     profileLabel: "\u5f53\u524d\u753b\u50cf",
     setup: "\u53ef\u7528\u6761\u4ef6",
     setupPending: "\u53ef\u7528\u6761\u4ef6\u5f85\u786e\u8ba4",
+    atlasTitle: "\u52a8\u4f5c\u56fe\u9274",
+    atlasSubtitle: "\u4f60\u7684\u5065\u5eb7\u5206\u8eab\u53ef\u4ee5\u6f14\u793a\u6574\u4e2a\u52a8\u4f5c\u5e93 \u2014\u2014 \u5df2\u81ea\u52a8\u907f\u5f00\u4f60\u9700\u8981\u4fdd\u62a4\u7684\u90e8\u4f4d\u3002",
+    atlasMovements: "\u4e2a\u52a8\u4f5c",
+    atlasSafeHidden: "\u4e3a\u5b89\u5168\u5df2\u9690\u85cf",
+    liveDemo: "\u5b9e\u65f6\u6f14\u793a",
+    groupAll: "\u5168\u90e8",
+    groupChest: "\u80f8",
+    groupBack: "\u80cc",
+    groupLegs: "\u817f",
+    groupShoulders: "\u80a9",
+    groupArms: "\u624b\u81c2",
+    groupCore: "\u6838\u5fc3",
+    groupCardio: "\u6709\u6c27",
     wellnessProfile: "\u5065\u5eb7\u6863\u6848",
     readiness: "\u51c6\u5907\u5ea6",
     consistency: "\u575a\u6301\u5ea6",
@@ -785,12 +820,50 @@ function ChapterProgress({
   );
 }
 
+const reducedMotionQuery = "(prefers-reduced-motion: reduce)";
+
+function usePrefersReducedMotion() {
+  return useSyncExternalStore(
+    (callback) => {
+      if (typeof window === "undefined" || !window.matchMedia) return () => {};
+      const query = window.matchMedia(reducedMotionQuery);
+      query.addEventListener("change", callback);
+      return () => query.removeEventListener("change", callback);
+    },
+    () => (typeof window !== "undefined" && window.matchMedia ? window.matchMedia(reducedMotionQuery).matches : false),
+    () => false
+  );
+}
+
 function BodyTwinVisual({ answers, progress, locale, generating = false, compact = false }: { answers: Record<string, AnswerValue>; progress: number; locale: Locale; generating?: boolean; compact?: boolean }) {
   const goal = typeof answers.goal_feeling === "string" ? answers.goal_feeling : "unknown";
-  const limitations = Array.isArray(answers.limitations) ? answers.limitations.filter((item) => item !== "none") : [];
+  const limitations = useMemo(
+    () => (Array.isArray(answers.limitations) ? answers.limitations.filter((item) => item !== "none") : []),
+    [answers.limitations]
+  );
   const equipment = Array.isArray(answers.equipment) ? answers.equipment.filter((item) => item !== "none") : [];
   const palette = getIllustrationPalette(goal);
-  const exercise = generating ? { anim: "43-walk" } : pickTwinExercise(goal, limitations);
+  const reducedMotion = usePrefersReducedMotion();
+
+  const sequence = useMemo(
+    () => (generating ? ["43-walk"] : pickTwinSequence(goal, limitations)),
+    [generating, goal, limitations]
+  );
+  const [moveIndex, setMoveIndex] = useState(0);
+
+  // Cycle through the safety-filtered movements so the twin visibly demonstrates
+  // variety. Paused when only one move applies or the user prefers reduced motion.
+  // The index is clamped/modulo'd at read + tick time, so no reset is needed when
+  // the sequence changes.
+  useEffect(() => {
+    if (reducedMotion || sequence.length <= 1) return;
+    const timer = window.setInterval(() => {
+      setMoveIndex((current) => (current + 1) % sequence.length);
+    }, 2600);
+    return () => window.clearInterval(timer);
+  }, [reducedMotion, sequence]);
+
+  const currentAnim = sequence[Math.min(moveIndex, sequence.length - 1)] ?? "44-stay";
 
   return (
     <div className={compact ? "mt-4" : ""}>
@@ -799,10 +872,10 @@ function BodyTwinVisual({ answers, progress, locale, generating = false, compact
         <div className="relative z-10 h-[270px] min-h-[230px] w-full overflow-hidden rounded-[1.25rem]">
           <div className="absolute inset-x-10 bottom-5 h-8 rounded-full bg-stone-900/10 blur-md" />
           <Rive
-            key={exercise.anim}
+            key={currentAnim}
             src="/avatars/gym-workout-icons.riv"
             artboard="Main"
-            animations={exercise.anim}
+            animations={currentAnim}
             layout={riveLayout}
             shouldDisableRiveListeners
             className="relative z-10 h-full w-full"
@@ -810,10 +883,27 @@ function BodyTwinVisual({ answers, progress, locale, generating = false, compact
           <div className="absolute right-4 top-4 z-20 grid h-12 w-12 place-items-center rounded-full bg-white/90 text-xs font-black text-stone-900 shadow-md ring-2" style={{ ["--tw-ring-color" as string]: palette.outfit }}>
             {progress}%
           </div>
-          <div className="absolute bottom-3 left-3 z-20 rounded-full bg-stone-950/70 px-3 py-1 text-[11px] font-semibold text-white">
-            {exerciseLabel(exercise.anim, locale)}
+          <div className="absolute bottom-3 left-3 z-20 flex items-center gap-2">
+            <span className="rounded-full bg-stone-950/70 px-3 py-1 text-[11px] font-semibold text-white">
+              {exerciseLabel(currentAnim, locale)}
+            </span>
+            {sequence.length > 1 ? (
+              <span className="rounded-full bg-orange-500/90 px-2 py-1 text-[10px] font-bold text-white">
+                {Math.min(moveIndex, sequence.length - 1) + 1}/{sequence.length}
+              </span>
+            ) : null}
           </div>
         </div>
+        {sequence.length > 1 ? (
+          <div className="relative z-20 mt-2 flex justify-center gap-1.5">
+            {sequence.map((anim, index) => (
+              <span
+                key={anim}
+                className={`h-1.5 rounded-full transition-all ${index === Math.min(moveIndex, sequence.length - 1) ? "w-5 bg-orange-500" : "w-1.5 bg-stone-300"}`}
+              />
+            ))}
+          </div>
+        ) : null}
         {!compact ? (
           <div className="relative z-20 mt-3 space-y-1.5 rounded-2xl border border-white/70 bg-white/85 p-3 text-stone-900 shadow-sm backdrop-blur">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-500">{copy[locale].profileLabel}</p>
@@ -833,46 +923,125 @@ function BodyTwinVisual({ answers, progress, locale, generating = false, compact
   );
 }
 
-function pickTwinExercise(goal: string, limitations: string[]): { anim: string } {
-  let anim =
-    ({
-      energy: "43-walk",
-      mobility: "42-neck-shrugs",
-      core: "40-abs-incline-sit-ups",
-      tone: "17-legs-squads"
-    } as Record<string, string>)[goal] ?? "44-stay";
-
-  // Safety overrides: never show an exercise that stresses a limited area.
-  if (limitations.includes("knees") && (anim === "17-legs-squads" || anim === "44-stay")) anim = "40-abs-incline-sit-ups";
-  if (limitations.includes("back") && anim === "40-abs-incline-sit-ups") anim = "42-neck-shrugs";
-  if (limitations.includes("neck_shoulders") && anim === "42-neck-shrugs") anim = "43-walk";
-  return { anim };
-}
-
-function exerciseLabel(anim: string, locale: Locale) {
-  const zh: Record<string, string> = {
-    "43-walk": "\u6709\u6c27\u6162\u8d70",
-    "44-stay": "\u7ad9\u59ff\u5f85\u547d",
-    "42-neck-shrugs": "\u9888\u80a9\u6d3e\u52a8",
-    "40-abs-incline-sit-ups": "\u6838\u5fc3\u5377\u8179",
-    "17-legs-squads": "\u817f\u90e8\u6df1\u8e72"
-  };
-  const en: Record<string, string> = {
-    "43-walk": "Cardio walk",
-    "44-stay": "Ready stance",
-    "42-neck-shrugs": "Neck / shoulder mobility",
-    "40-abs-incline-sit-ups": "Core sit-ups",
-    "17-legs-squads": "Leg squats"
-  };
-  return locale === "zh" ? (zh[anim] ?? anim) : (en[anim] ?? anim);
-}
-
 type IllustrationPalette = {
   outfit: string;
   outfitLight: string;
   accent: string;
   glow: string;
 };
+
+const groupLabelKey: Record<MuscleGroup, "groupChest" | "groupBack" | "groupLegs" | "groupShoulders" | "groupArms" | "groupCore" | "groupCardio"> = {
+  chest: "groupChest",
+  back: "groupBack",
+  legs: "groupLegs",
+  shoulders: "groupShoulders",
+  arms: "groupArms",
+  core: "groupCore",
+  cardio: "groupCardio"
+};
+
+function AnimatedExerciseCard({ exercise, locale }: { exercise: Exercise; locale: Locale }) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [visible, setVisible] = useState(false);
+
+  // Only mount the Rive canvas while the card is near the viewport, so an atlas
+  // of 44 animations never runs 44 canvases at once.
+  useEffect(() => {
+    const node = ref.current;
+    if (!node || typeof IntersectionObserver === "undefined") {
+      setVisible(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) setVisible(entry.isIntersecting);
+      },
+      { rootMargin: "160px" }
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div
+      ref={ref}
+      className="group relative overflow-hidden rounded-2xl border border-stone-200 bg-gradient-to-br from-white to-stone-50 p-2 shadow-sm transition hover:-translate-y-0.5 hover:border-orange-200 hover:shadow-md"
+    >
+      <div className="relative h-24 w-full overflow-hidden rounded-xl bg-[radial-gradient(circle_at_50%_22%,#fff7ed,transparent_70%)]">
+        {visible ? (
+          <Rive
+            key={exercise.anim}
+            src="/avatars/gym-workout-icons.riv"
+            artboard="Main"
+            animations={exercise.anim}
+            layout={riveLayout}
+            shouldDisableRiveListeners
+            className="h-full w-full"
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center text-2xl font-black text-stone-200">
+            {exercise.anim.split("-")[0]}
+          </div>
+        )}
+      </div>
+      <p className="mt-1.5 truncate px-1 text-center text-xs font-semibold text-stone-700">
+        {locale === "zh" ? exercise.zh : exercise.en}
+      </p>
+    </div>
+  );
+}
+
+function ExerciseAtlas({ answers, locale }: { answers: Record<string, AnswerValue>; locale: Locale }) {
+  const t = copy[locale];
+  const limitations = useMemo(
+    () => (Array.isArray(answers.limitations) ? answers.limitations.filter((item) => item !== "none") : []),
+    [answers.limitations]
+  );
+  const safe = useMemo(() => EXERCISES.filter((exercise) => !isContraindicated(exercise.anim, limitations)), [limitations]);
+  const hidden = EXERCISES.length - safe.length;
+  const availableGroups = useMemo(() => MUSCLE_GROUPS.filter((group) => safe.some((exercise) => exercise.group === group)), [safe]);
+  const [group, setGroup] = useState<MuscleGroup | "all">("all");
+  const shown = group === "all" ? safe : safe.filter((exercise) => exercise.group === group);
+
+  return (
+    <div className="rounded-2xl border border-stone-200 bg-white p-5">
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <h3 className="text-xl font-bold text-stone-900">{t.atlasTitle}</h3>
+          <p className="mt-1 max-w-xl text-sm text-stone-500">{t.atlasSubtitle}</p>
+        </div>
+        <span className="rounded-full bg-orange-50 px-3 py-1 text-xs font-bold text-orange-600">
+          {safe.length} {t.atlasMovements}
+          {hidden > 0 ? ` · ${hidden} ${t.atlasSafeHidden}` : ""}
+        </span>
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button
+          onClick={() => setGroup("all")}
+          className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${group === "all" ? "border-orange-500 bg-orange-500 text-white" : "border-stone-200 text-stone-600 hover:border-stone-300"}`}
+        >
+          {t.groupAll}
+        </button>
+        {availableGroups.map((availableGroup) => (
+          <button
+            key={availableGroup}
+            onClick={() => setGroup(availableGroup)}
+            className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${group === availableGroup ? "border-orange-500 bg-orange-500 text-white" : "border-stone-200 text-stone-600 hover:border-stone-300"}`}
+          >
+            {t[groupLabelKey[availableGroup]]}
+          </button>
+        ))}
+      </div>
+
+      <div className="mt-4 grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5">
+        {shown.map((exercise) => (
+          <AnimatedExerciseCard key={exercise.anim} exercise={exercise} locale={locale} />
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function ResultCard({ result, onUnlock, locale, answers, sessionId }: { result: ResultResponse; onUnlock: () => void; locale: Locale; answers: Record<string, AnswerValue>; sessionId?: string }) {
   const t = copy[locale];
@@ -910,6 +1079,7 @@ function ResultCard({ result, onUnlock, locale, answers, sessionId }: { result: 
       {result.healthMetrics ? (
         <HealthMetricsCard metrics={result.healthMetrics} locale={locale} onUnlock={onUnlock} locked={result.access !== "full"} />
       ) : null}
+      <ExerciseAtlas answers={answers} locale={locale} />
       <div className="grid gap-3 sm:grid-cols-3">{result.preview.microInsights.map((insight) => <p key={insight} className="rounded-2xl border border-stone-200 bg-white p-4 text-sm text-stone-700">{insight}</p>)}</div>
       <div className="rounded-2xl bg-stone-900 p-5 text-white">
         <p className="text-sm font-semibold text-orange-100">{t.sampleWorkout}</p>

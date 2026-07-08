@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Rive, { Alignment, Fit, Layout } from "@rive-app/react-canvas";
+import { EXERCISES } from "@/lib/exercise-catalog";
 
 type ArtboardConfig = {
   artboard: string;
@@ -27,20 +28,7 @@ const files: RiveFileConfig[] = [
     artboards: [
       {
         artboard: "Main",
-        animations: [
-          "43-walk",
-          "44-stay",
-          "8-chest-push-ups",
-          "17-legs-squads",
-          "23-legs-dumbbell-lunges",
-          "40-abs-incline-sit-ups",
-          "41-abs-leg-raises",
-          "9-back-pull-ups",
-          "32-bicepts-dumbbell-curl",
-          "24-shoulders-barbell-press",
-          "1-chest-bench-barbell-press",
-          "16-legs-dead-lift"
-        ]
+        animations: EXERCISES.map((exercise) => exercise.anim)
       },
       { artboard: "Scene", animations: ["Timeline 1"] }
     ]
