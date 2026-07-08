@@ -1,10 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
 import { activeQuiz } from "../src/lib/quiz-definition";
 import { scoreAssessment } from "../src/lib/scoring";
 import { generateAssessmentReport } from "../src/lib/report-generator";
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({
+  adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! })
+});
 
 async function main() {
   const quiz = await prisma.quizDefinition.upsert({
@@ -53,14 +56,21 @@ async function main() {
   const demoAnswers = {
     goal_feeling: "mobility",
     primary_goal: "posture",
+    target_timeline: "one_month",
     age_range: "30_39",
     activity_level: "low",
+    sleep_quality: "ok",
     weekly_sessions: 3,
     session_minutes: "18",
+    preferred_time: "evening",
     equipment: ["mat", "wall"],
     limitations: ["knees"],
+    pain_now: "none",
     motivation_style: "coach",
-    commitment: "modify"
+    past_struggle: "time",
+    commitment: "modify",
+    diet_style: "balanced",
+    water_intake: "medium"
   };
 
   for (const question of activeQuiz.questions) {

@@ -5,6 +5,7 @@ import { enqueueAssessmentReport } from "@/lib/queue";
 import { recordFunnelEvent } from "@/lib/events";
 import { activeQuiz } from "@/lib/quiz-definition";
 import { scoreAssessment } from "@/lib/scoring";
+import { parseLocale } from "@/lib/locale";
 import { handleApiError, jsonError } from "@/lib/api";
 
 type Params = {
@@ -14,6 +15,8 @@ type Params = {
 export async function POST(_request: Request, { params }: Params) {
   try {
     const { sessionId } = await params;
+    const body = await _request.json().catch(() => ({}));
+    const locale = parseLocale(body.locale);
     const session = await prisma.assessmentSession.findUnique({
       where: { id: sessionId },
       include: {
@@ -35,7 +38,7 @@ export async function POST(_request: Request, { params }: Params) {
     const answerMap = Object.fromEntries(
       session.answers.map((answer) => [answer.questionId, answer.value])
     ) as Record<string, AnswerValue>;
-    const profile = scoreAssessment(answerMap);
+    const profile = scoreAssessment(answerMap, locale);
 
     const updated = await prisma.$transaction(async (tx) => {
       const savedProfile = await tx.assessmentProfile.upsert({
@@ -84,10 +87,10 @@ export async function POST(_request: Request, { params }: Params) {
     });
 
     if (updated.reportJob.status === "PENDING") {
-      await enqueueAssessmentReport(sessionId, updated.reportJob.id);
+      await enqueueAssessmentReport(sessionId, updated.reportJob.id, locale);
     }
 
-    await recordFunnelEvent("assessment_completed", { reportJobId: updated.reportJob.id }, sessionId);
+    await recordFunnelEvent("assessment_completed", { reportJobId: updated.reportJob.id, locale }, sessionId);
 
     return NextResponse.json(updated);
   } catch (error) {

@@ -31,9 +31,11 @@ export type QuizOption = {
   insight?: string;
 };
 
+export type QuizChapter = "goal" | "body" | "lifestyle" | "constraints" | "motivation" | "nutrition";
+
 export type QuizQuestion = {
   id: string;
-  chapter: "goal" | "body" | "lifestyle" | "constraints" | "motivation";
+  chapter: QuizChapter;
   type: QuestionType;
   title: string;
   subtitle?: string;
@@ -129,7 +131,23 @@ export const fullPlanSchema = z.object({
   ),
   progressionRules: z.array(z.string()),
   safetyNotes: z.array(z.string()),
-  adjustmentSuggestions: z.array(z.string())
+  adjustmentSuggestions: z.array(z.string()),
+  coachNote: z.string().optional(),
+  generatedBy: z.enum(["ai", "fallback"]).optional()
 });
 
 export type FullPlan = z.infer<typeof fullPlanSchema>;
+
+export const coachNarrativeSchema = z.object({
+  summary: z.string().min(1).max(600),
+  coachNote: z.string().min(1).max(600)
+});
+
+export type CoachNarrative = z.infer<typeof coachNarrativeSchema>;
+
+export const reviewVerdictSchema = z.object({
+  approved: z.boolean(),
+  issues: z.array(z.string().max(240)).max(8).default([])
+});
+
+export type ReviewVerdict = z.infer<typeof reviewVerdictSchema>;

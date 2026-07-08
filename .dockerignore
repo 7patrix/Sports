@@ -1,0 +1,15 @@
+node_modules
+.next
+out
+dist
+build
+.git
+.env
+.env*.local
+coverage
+playwright-report
+test-results
+rive
+scripts
+*.tsbuildinfo
+npm-debug.log*

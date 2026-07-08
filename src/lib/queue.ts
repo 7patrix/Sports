@@ -31,10 +31,10 @@ export function getAssessmentQueue() {
   return queue;
 }
 
-export async function enqueueAssessmentReport(sessionId: string, reportJobId: string) {
+export async function enqueueAssessmentReport(sessionId: string, reportJobId: string, locale = "en") {
   return getAssessmentQueue().add(
     "generate-report",
-    { sessionId, reportJobId },
+    { sessionId, reportJobId, locale },
     {
       jobId: reportJobId,
       attempts: 2,

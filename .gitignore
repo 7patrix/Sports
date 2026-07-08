@@ -27,6 +27,12 @@ test-results/
 # TypeScript
 *.tsbuildinfo
 
+# rive download staging (raw assets; used copies live in public/avatars)
+/rive/
+
+# helper scripts output
+/scripts/
+
 # system
 .DS_Store
 Thumbs.db

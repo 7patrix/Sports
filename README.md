@@ -10,8 +10,9 @@ This is not a simple form app. It models the core infrastructure behind a Better
 - Strong backend loop: answers -> signals -> preview -> queued report -> safety review -> full plan.
 - Postgres is the source of truth; BullMQ only carries report job IDs.
 - Preview/full result split with entitlement checks instead of a single `isSubscribed` flag.
-- Deterministic fallback report generation, so the demo works without a live LLM key.
-- Tests for scoring and structured report generation.
+- Real AI writer (OpenAI-compatible) for narrative copy, with a deterministic fallback so the demo works without a live LLM key.
+- Interactive Rive Health Twin avatar that switches exercise animation by goal and safety limits.
+- Tests for scoring (incl. pain/sleep/nutrition signals) and structured report generation.
 
 ## Stack
 
@@ -32,6 +33,8 @@ npm run db:migrate
 npm run db:seed
 ```
 
+Docker maps Postgres to `localhost:55432` and Redis to `localhost:56379` to avoid common local port conflicts.
+
 Run the web app:
 
 ```bash
@@ -45,6 +48,14 @@ npm run worker
 ```
 
 Open `http://localhost:3000`.
+
+## AI writer
+
+By default `MOCK_AI=true` uses the deterministic writer. To enable the real AI
+writer, set `MOCK_AI=false` and provide `OPENAI_API_KEY` (and optionally
+`OPENAI_BASE_URL` / `AI_MODEL`). The AI only writes narrative copy (summary +
+coach note); the exercise structure stays deterministic and any AI failure
+falls back automatically. The worker logs whether each report was AI or fallback.
 
 ## Verification
 
@@ -69,3 +80,4 @@ npm run build
 - `docs/architecture.md`
 - `docs/api.md`
 - `docs/demo-script.md`
+- `docs/deployment.md`
