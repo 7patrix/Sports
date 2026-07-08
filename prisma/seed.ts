@@ -125,6 +125,11 @@ async function upsertCompletedSession(quizId: string, quizVersion: number, token
       create: { sessionId: session.id, scope: "assessment.full_plan", status: "ACTIVE" },
       update: { status: "ACTIVE" }
     });
+  } else {
+    // Keep the unpaid demo reliably re-runnable: strip any prior payment/entitlement
+    // (e.g. left over from a /pay smoke test) so it always starts masked.
+    await prisma.entitlement.deleteMany({ where: { sessionId: session.id } });
+    await prisma.payment.deleteMany({ where: { sessionId: session.id } });
   }
 
   return session;
