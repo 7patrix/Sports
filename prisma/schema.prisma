@@ -31,6 +31,11 @@ enum EntitlementStatus {
   REVOKED
 }
 
+enum SubscriptionStatus {
+  FREE
+  ACTIVE
+}
+
 model QuizDefinition {
   id          String   @id @default(cuid())
   slug        String
@@ -54,6 +59,7 @@ model AssessmentSession {
   quizDefinitionId String
   quizVersion     Int
   status          AssessmentStatus @default(IN_PROGRESS)
+  subscriptionStatus SubscriptionStatus @default(FREE)
   currentStep     Int              @default(0)
   completedAt     DateTime?
   previewUnlocked Boolean          @default(false)
@@ -95,6 +101,7 @@ model AssessmentProfile {
   riskFlags       Json
   planConstraints Json
   preview         Json
+  healthMetrics   Json?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

@@ -63,6 +63,19 @@ type ResultResponse = {
     intensityTolerance: number;
     recoveryNeed: number;
   };
+  subscriptionStatus?: "FREE" | "ACTIVE";
+  healthMetrics: null | {
+    bmi: number;
+    bmiCategory: "underweight" | "normal" | "overweight" | "obese";
+    goalDirection: "lose" | "gain" | "maintain";
+    recommendedCalories: number | null;
+    macros: { proteinG: number; carbsG: number; fatG: number } | null;
+    weeklyRateKg: number | null;
+    weeksToGoal: number | null;
+    targetDateIso: string | null;
+    projection: { week: number; weightKg: number }[] | null;
+    locked: boolean;
+  };
   email: string | null;
 };
 
@@ -130,10 +143,23 @@ const copy = {
     emailCta: "Save my plan",
     emailSaved: "Saved. Your plan is linked to this email.",
     emailInvalid: "Please enter a valid email.",
-    projectionTitle: "Projected adherence",
+    projectionTitle: "Projected weight",
     projectionNow: "Now",
-    projectionWeeks: "Week 8",
-    projectionCaption: "Estimated if you keep your weekly rhythm. Illustrative, not a guarantee.",
+    projectionWeeks: "Target",
+    projectionCaption: "Estimated if you keep your recommended intake and rhythm. Illustrative, not a guarantee.",
+    healthMetricsTitle: "Health metrics",
+    bmiLabel: "BMI",
+    caloriesLabel: "Daily calorie target",
+    proteinLabel: "Protein",
+    carbsLabel: "Carbs",
+    fatLabel: "Fat",
+    targetDateLabel: "Estimated target date",
+    weeksToGoalLabel: "Weeks to goal",
+    metricsLocked: "Subscribe to unlock your calorie target, macros, and the exact date to reach your goal weight.",
+    goalLose: "Fat loss",
+    goalGain: "Muscle / weight gain",
+    goalMaintain: "Maintain",
+    numberContinue: "Continue",
     stageLabels: {
       queued: "Queued",
       mapping_signals: "Mapping signals",
@@ -203,10 +229,23 @@ const copy = {
     emailCta: "\u4fdd\u5b58\u6211\u7684\u8ba1\u5212",
     emailSaved: "\u5df2\u4fdd\u5b58\uff0c\u4f60\u7684\u8ba1\u5212\u5df2\u7ed1\u5b9a\u8be5\u90ae\u7bb1\u3002",
     emailInvalid: "\u8bf7\u8f93\u5165\u6709\u6548\u7684\u90ae\u7bb1\u3002",
-    projectionTitle: "\u575a\u6301\u5ea6\u9884\u6d4b",
+    projectionTitle: "\u4f53\u91cd\u9884\u6d4b",
     projectionNow: "\u73b0\u5728",
-    projectionWeeks: "\u7b2c 8 \u5468",
-    projectionCaption: "\u82e5\u4fdd\u6301\u6bcf\u5468\u8282\u594f\u7684\u9884\u4f30\u793a\u610f\uff0c\u975e\u4fdd\u8bc1\u7ed3\u679c\u3002",
+    projectionWeeks: "\u76ee\u6807",
+    projectionCaption: "\u82e5\u4fdd\u6301\u5efa\u8bae\u6444\u5165\u548c\u8282\u594f\u7684\u9884\u4f30\u793a\u610f\uff0c\u975e\u4fdd\u8bc1\u7ed3\u679c\u3002",
+    healthMetricsTitle: "\u5065\u5eb7\u6307\u6807",
+    bmiLabel: "BMI",
+    caloriesLabel: "\u6bcf\u65e5\u70ed\u91cf\u76ee\u6807",
+    proteinLabel: "\u86cb\u767d\u8d28",
+    carbsLabel: "\u78b3\u6c34",
+    fatLabel: "\u8102\u80aa",
+    targetDateLabel: "\u9884\u4f30\u8fbe\u6807\u65e5\u671f",
+    weeksToGoalLabel: "\u8fbe\u6807\u5468\u6570",
+    metricsLocked: "\u8ba2\u9605\u540e\u89e3\u9501\u4f60\u7684\u70ed\u91cf\u76ee\u6807\u3001\u4e09\u5927\u8425\u517b\u7d20\u4ee5\u53ca\u8fbe\u5230\u76ee\u6807\u4f53\u91cd\u7684\u5177\u4f53\u65e5\u671f\u3002",
+    goalLose: "\u51cf\u8102",
+    goalGain: "\u589e\u808c\u002f\u589e\u91cd",
+    goalMaintain: "\u4fdd\u6301",
+    numberContinue: "\u7ee7\u7eed",
     stageLabels: {
       queued: "\u6392\u961f\u4e2d",
       mapping_signals: "\u5206\u6790\u5065\u5eb7\u4fe1\u53f7",
@@ -221,9 +260,13 @@ const copy = {
 
 const sampleAnswers: Record<string, AnswerValue> = {
   goal_feeling: "mobility",
-  primary_goal: "posture",
+  primary_goal: "weight_loss",
   target_timeline: "one_month",
-  age_range: "30_39",
+  gender: "female",
+  age: 32,
+  height_cm: 168,
+  weight_kg: 72,
+  target_weight_kg: 63,
   activity_level: "low",
   sleep_quality: "ok",
   weekly_sessions: 3,
@@ -438,10 +481,18 @@ export function QuizExperience({ quiz }: { quiz: QuizDefinitionContract }) {
   }
 
   const selectedValue = question ? answers[question.id] : undefined;
+  const numberInRange =
+    question?.type === "number" &&
+    typeof selectedValue === "number" &&
+    Number.isFinite(selectedValue) &&
+    (question.min === undefined || selectedValue >= question.min) &&
+    (question.max === undefined || selectedValue <= question.max);
   const canManuallyContinue =
     question?.type === "multi" || question?.type === "scale"
       ? selectedValue !== undefined && (!Array.isArray(selectedValue) || selectedValue.length > 0)
-      : false;
+      : question?.type === "number"
+        ? Boolean(numberInRange)
+        : false;
   const latestInsight = getLatestInsight(displayQuiz.questions, answers);
 
   return (
@@ -569,6 +620,57 @@ function QuestionCard({ question, value, onAnswer, saving, locale }: { question:
           <p className="mt-3 text-center text-2xl font-bold text-stone-900">{String(value ?? question.min)} {question.unit}</p>
         </div>
       ) : null}
+      {question.type === "number" ? <NumberField key={question.id} question={question} value={value} onAnswer={onAnswer} saving={saving} /> : null}
+    </div>
+  );
+}
+
+function NumberField({ question, value, onAnswer, saving }: { question: QuizQuestion; value?: AnswerValue; onAnswer: (value: AnswerValue) => void; saving: boolean }) {
+  const [draft, setDraft] = useState(typeof value === "number" ? String(value) : "");
+
+  function commit() {
+    const parsed = Number(draft);
+    if (draft.trim() === "" || !Number.isFinite(parsed)) return;
+    if (parsed !== value) void onAnswer(parsed);
+  }
+
+  const outOfRange =
+    draft.trim() !== "" &&
+    Number.isFinite(Number(draft)) &&
+    ((question.min !== undefined && Number(draft) < question.min) || (question.max !== undefined && Number(draft) > question.max));
+
+  return (
+    <div className="mt-8 rounded-2xl bg-white p-5">
+      <div className="flex items-center gap-3">
+        <input
+          className="w-40 rounded-xl border border-stone-300 px-4 py-3 text-2xl font-bold text-stone-900 outline-none focus:border-orange-400"
+          type="number"
+          inputMode="numeric"
+          min={question.min}
+          max={question.max}
+          value={draft}
+          disabled={saving}
+          onChange={(event) => setDraft(event.target.value)}
+          onBlur={commit}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.currentTarget.blur();
+            }
+          }}
+        />
+        {question.unit ? <span className="text-lg font-semibold text-stone-500">{question.unit}</span> : null}
+      </div>
+      {outOfRange ? (
+        <p className="mt-2 text-sm text-rose-600">
+          {question.min}
+          {" - "}
+          {question.max} {question.unit}
+        </p>
+      ) : (
+        <p className="mt-2 text-xs text-stone-400">
+          {question.min} - {question.max} {question.unit}
+        </p>
+      )}
     </div>
   );
 }
@@ -735,8 +837,10 @@ function ResultCard({ result, onUnlock, locale, answers, sessionId }: { result: 
             <ScoreBar label={t.intensityTolerance} value={result.scores.intensityTolerance} tone="#8b5cf6" />
             <ScoreBar label={t.recoveryNeed} value={result.scores.recoveryNeed} tone="#fb7185" />
           </div>
-          <ProjectionChart readiness={result.scores.readiness} consistency={result.scores.consistency} locale={locale} tone={getIllustrationPalette(typeof answers.goal_feeling === "string" ? answers.goal_feeling : "unknown").outfit} />
         </div>
+      ) : null}
+      {result.healthMetrics ? (
+        <HealthMetricsCard metrics={result.healthMetrics} locale={locale} onUnlock={onUnlock} locked={result.access !== "full"} />
       ) : null}
       <div className="grid gap-3 sm:grid-cols-3">{result.preview.microInsights.map((insight) => <p key={insight} className="rounded-2xl border border-stone-200 bg-white p-4 text-sm text-stone-700">{insight}</p>)}</div>
       <div className="rounded-2xl bg-stone-900 p-5 text-white">
@@ -769,21 +873,99 @@ function ResultCard({ result, onUnlock, locale, answers, sessionId }: { result: 
   );
 }
 
-function ProjectionChart({ readiness, consistency, locale, tone }: { readiness: number; consistency: number; locale: Locale; tone: string }) {
+function HealthMetricsCard({
+  metrics,
+  locale,
+  onUnlock,
+  locked
+}: {
+  metrics: NonNullable<ResultResponse["healthMetrics"]>;
+  locale: Locale;
+  onUnlock: () => void;
+  locked: boolean;
+}) {
   const t = copy[locale];
-  const start = Math.max(20, Math.min(90, Math.round(readiness * 0.7)));
-  const end = Math.max(start + 6, Math.min(98, Math.round(start + (consistency / 100) * 34)));
-  const weeks = 8;
+  const goalLabel =
+    metrics.goalDirection === "lose" ? t.goalLose : metrics.goalDirection === "gain" ? t.goalGain : t.goalMaintain;
+  const tone = metrics.bmiCategory === "normal" ? "#22c55e" : metrics.bmiCategory === "underweight" ? "#38bdf8" : "#f97316";
+
+  return (
+    <div className="rounded-2xl border border-stone-200 bg-white p-5">
+      <div className="flex items-center justify-between">
+        <h3 className="text-xl font-bold text-stone-900">{t.healthMetricsTitle}</h3>
+        <span className="rounded-full bg-stone-100 px-3 py-1 text-xs font-bold text-stone-600">{goalLabel}</span>
+      </div>
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        <ProfileMetric label={t.bmiLabel} value={`${metrics.bmi} (${translateBmi(metrics.bmiCategory, locale)})`} />
+        {locked ? (
+          <>
+            <LockedMetric label={t.caloriesLabel} />
+            <LockedMetric label={t.targetDateLabel} />
+          </>
+        ) : (
+          <>
+            <ProfileMetric label={t.caloriesLabel} value={`${metrics.recommendedCalories} kcal`} />
+            <ProfileMetric
+              label={t.targetDateLabel}
+              value={metrics.targetDateIso ?? (locale === "zh" ? "维持即可" : "Maintain")}
+            />
+          </>
+        )}
+      </div>
+      {!locked && metrics.macros ? (
+        <div className="mt-3 grid gap-3 sm:grid-cols-3">
+          <ProfileMetric label={t.proteinLabel} value={`${metrics.macros.proteinG} g`} />
+          <ProfileMetric label={t.carbsLabel} value={`${metrics.macros.carbsG} g`} />
+          <ProfileMetric label={t.fatLabel} value={`${metrics.macros.fatG} g`} />
+        </div>
+      ) : null}
+      {!locked && metrics.projection && metrics.projection.length > 1 ? (
+        <WeightProjectionChart projection={metrics.projection} locale={locale} tone={tone} />
+      ) : null}
+      {locked ? (
+        <div className="mt-4 rounded-2xl border border-dashed border-orange-300 bg-orange-50 p-4">
+          <p className="text-sm text-stone-700">{t.metricsLocked}</p>
+          <button
+            className="mt-3 rounded-full bg-orange-500 px-5 py-2 text-sm font-bold text-white shadow-lg shadow-orange-200"
+            onClick={onUnlock}
+          >
+            {t.unlock}
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function LockedMetric({ label }: { label: string }) {
+  return (
+    <div className="rounded-2xl bg-stone-50 p-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-stone-400">{label}</p>
+      <p className="mt-2 select-none font-bold text-stone-300 blur-[3px]">888 ••••</p>
+    </div>
+  );
+}
+
+function translateBmi(category: "underweight" | "normal" | "overweight" | "obese", locale: Locale) {
+  const zh = { underweight: "偏瘦", normal: "正常", overweight: "偏重", obese: "肥胖" } as const;
+  const en = { underweight: "Underweight", normal: "Normal", overweight: "Overweight", obese: "Obese" } as const;
+  return locale === "zh" ? zh[category] : en[category];
+}
+
+function WeightProjectionChart({ projection, locale, tone }: { projection: { week: number; weightKg: number }[]; locale: Locale; tone: string }) {
+  const t = copy[locale];
   const width = 320;
   const height = 120;
   const padX = 12;
   const padY = 14;
-  const points = Array.from({ length: weeks + 1 }, (_, i) => {
-    const tt = i / weeks;
-    const eased = 1 - Math.pow(1 - tt, 1.7);
-    const value = start + (end - start) * eased;
-    const x = padX + ((width - padX * 2) * i) / weeks;
-    const y = height - padY - ((height - padY * 2) * (value - 10)) / 90;
+  const weights = projection.map((point) => point.weightKg);
+  const maxWeight = Math.max(...weights);
+  const minWeight = Math.min(...weights);
+  const span = Math.max(1, maxWeight - minWeight);
+  const lastWeek = projection[projection.length - 1].week || 1;
+  const points = projection.map((point) => {
+    const x = padX + ((width - padX * 2) * point.week) / lastWeek;
+    const y = padY + ((height - padY * 2) * (maxWeight - point.weightKg)) / span;
     return { x, y };
   });
   const linePath = points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
@@ -793,7 +975,9 @@ function ProjectionChart({ readiness, consistency, locale, tone }: { readiness: 
     <div className="mt-4 rounded-2xl bg-stone-50 p-4">
       <div className="flex items-center justify-between">
         <p className="text-sm font-bold text-stone-900">{t.projectionTitle}</p>
-        <p className="text-sm font-black" style={{ color: tone }}>{start} ? {end}</p>
+        <p className="text-sm font-black" style={{ color: tone }}>
+          {weights[0]} → {weights[weights.length - 1]} kg
+        </p>
       </div>
       <svg viewBox={`0 0 ${width} ${height}`} className="mt-2 h-28 w-full">
         <defs>

@@ -33,6 +33,9 @@ test-results/
 # helper scripts output
 /scripts/
 
+# challenge brief (not part of the deliverable repo)
+*.pdf
+
 # system
 .DS_Store
 Thumbs.db

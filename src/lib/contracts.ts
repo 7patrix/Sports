@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { HealthMetrics } from "@/lib/health-metrics";
 
 export const answerValueSchema = z.union([
   z.string(),
@@ -101,6 +102,7 @@ export type ScoredProfile = {
   riskFlags: RiskFlag[];
   planConstraints: PlanConstraints;
   preview: AssessmentPreview;
+  healthMetrics: HealthMetrics | null;
 };
 
 export const workoutDaySchema = z.object({

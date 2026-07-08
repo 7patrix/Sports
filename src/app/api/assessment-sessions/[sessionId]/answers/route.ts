@@ -4,6 +4,7 @@ import { answerInputSchema } from "@/lib/contracts";
 import { prisma } from "@/lib/db";
 import { recordFunnelEvent } from "@/lib/events";
 import { activeQuiz } from "@/lib/quiz-definition";
+import { validateAnswer } from "@/lib/answer-validation";
 import { handleApiError, jsonError } from "@/lib/api";
 
 type Params = {
@@ -19,6 +20,12 @@ export async function PATCH(request: Request, { params }: Params) {
 
     if (!question) return jsonError("Unknown question", 422);
 
+    const validation = validateAnswer(question, input.value);
+    if (!validation.ok) {
+      return jsonError("Invalid answer value", 422, { questionId: question.id, reason: validation.error });
+    }
+    const normalizedValue = validation.value;
+
     const session = await prisma.assessmentSession.findUnique({ where: { id: sessionId } });
     if (!session) return jsonError("Session not found", 404);
     if (session.status !== "IN_PROGRESS") return jsonError("Completed sessions cannot be edited", 409);
@@ -33,11 +40,11 @@ export async function PATCH(request: Request, { params }: Params) {
       create: {
         sessionId,
         questionId: input.questionId,
-        value: input.value as Prisma.InputJsonValue,
+        value: normalizedValue as Prisma.InputJsonValue,
         chapter: question.chapter
       },
       update: {
-        value: input.value as Prisma.InputJsonValue,
+        value: normalizedValue as Prisma.InputJsonValue,
         chapter: question.chapter,
         answeredAt: new Date()
       }

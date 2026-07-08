@@ -69,7 +69,8 @@ const worker = new Worker<AssessmentJobData>(
         scores: session.profile.scores as ScoredProfile["scores"],
         riskFlags: session.profile.riskFlags as ScoredProfile["riskFlags"],
         planConstraints: session.profile.planConstraints as ScoredProfile["planConstraints"],
-        preview: session.profile.preview as ScoredProfile["preview"]
+        preview: session.profile.preview as ScoredProfile["preview"],
+        healthMetrics: (session.profile.healthMetrics as ScoredProfile["healthMetrics"]) ?? null
       };
 
       await prisma.reportArtifact.create({

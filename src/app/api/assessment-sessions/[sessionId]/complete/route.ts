@@ -49,14 +49,16 @@ export async function POST(_request: Request, { params }: Params) {
           scores: profile.scores,
           riskFlags: profile.riskFlags,
           planConstraints: profile.planConstraints,
-          preview: profile.preview
+          preview: profile.preview,
+          healthMetrics: profile.healthMetrics ?? undefined
         },
         update: {
           signals: profile.signals,
           scores: profile.scores,
           riskFlags: profile.riskFlags,
           planConstraints: profile.planConstraints,
-          preview: profile.preview
+          preview: profile.preview,
+          healthMetrics: profile.healthMetrics ?? undefined
         }
       });
 

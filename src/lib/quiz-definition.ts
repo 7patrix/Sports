@@ -48,18 +48,61 @@ export const activeQuiz: QuizDefinitionContract = {
       ]
     },
     {
-      id: "age_range",
+      id: "gender",
       chapter: "body",
       type: "single",
-      title: "Choose your age range",
+      title: "How should we calibrate your metabolism?",
+      subtitle: "Used to calculate your calorie needs accurately.",
       required: true,
       options: [
-        { label: "18-29", value: "18_29" },
-        { label: "30-39", value: "30_39" },
-        { label: "40-49", value: "40_49" },
-        { label: "50+", value: "50_plus" }
+        { label: "Female", value: "female" },
+        { label: "Male", value: "male" },
+        { label: "Prefer not to say", value: "other" }
       ],
-      why: "Age changes recovery assumptions and progression pace."
+      why: "Metabolic rate formulas are calibrated differently by biological sex."
+    },
+    {
+      id: "age",
+      chapter: "body",
+      type: "number",
+      title: "How old are you?",
+      required: true,
+      min: 13,
+      max: 100,
+      unit: "yrs",
+      why: "Age changes recovery assumptions, calories and progression pace."
+    },
+    {
+      id: "height_cm",
+      chapter: "body",
+      type: "number",
+      title: "Your height",
+      required: true,
+      min: 120,
+      max: 230,
+      unit: "cm",
+      why: "Height and weight drive your BMI and daily calorie target."
+    },
+    {
+      id: "weight_kg",
+      chapter: "body",
+      type: "number",
+      title: "Your current weight",
+      required: true,
+      min: 35,
+      max: 250,
+      unit: "kg"
+    },
+    {
+      id: "target_weight_kg",
+      chapter: "body",
+      type: "number",
+      title: "Your target weight",
+      subtitle: "We estimate a realistic, safe date to reach it.",
+      required: true,
+      min: 35,
+      max: 250,
+      unit: "kg"
     },
     {
       id: "activity_level",
@@ -279,18 +322,61 @@ export const activeQuizZh: QuizDefinitionContract = {
       ]
     },
     {
-      id: "age_range",
+      id: "gender",
       chapter: "body",
       type: "single",
-      title: "选择你的年龄段",
+      title: "我们该如何校准你的代谢？",
+      subtitle: "用于更准确地计算你的每日热量需求。",
       required: true,
       options: [
-        { label: "18-29", value: "18_29" },
-        { label: "30-39", value: "30_39" },
-        { label: "40-49", value: "40_49" },
-        { label: "50+", value: "50_plus" }
+        { label: "女性", value: "female" },
+        { label: "男性", value: "male" },
+        { label: "不愿透露", value: "other" }
       ],
-      why: "不同年龄段的恢复速度和训练进阶节奏会不一样。"
+      why: "基础代谢公式会按生理性别做不同校准。"
+    },
+    {
+      id: "age",
+      chapter: "body",
+      type: "number",
+      title: "你的年龄？",
+      required: true,
+      min: 13,
+      max: 100,
+      unit: "岁",
+      why: "年龄会影响恢复假设、热量和进阶节奏。"
+    },
+    {
+      id: "height_cm",
+      chapter: "body",
+      type: "number",
+      title: "你的身高",
+      required: true,
+      min: 120,
+      max: 230,
+      unit: "厘米",
+      why: "身高和体重决定你的 BMI 和每日热量目标。"
+    },
+    {
+      id: "weight_kg",
+      chapter: "body",
+      type: "number",
+      title: "你目前的体重",
+      required: true,
+      min: 35,
+      max: 250,
+      unit: "公斤"
+    },
+    {
+      id: "target_weight_kg",
+      chapter: "body",
+      type: "number",
+      title: "你的目标体重",
+      subtitle: "我们会估算一个现实、安全的达成日期。",
+      required: true,
+      min: 35,
+      max: 250,
+      unit: "公斤"
     },
     {
       id: "activity_level",

@@ -1,5 +1,6 @@
 import type { AnswerValue, RiskFlag, ScoredProfile } from "@/lib/contracts";
 import type { Locale } from "@/lib/locale";
+import { computeHealthMetrics, type ActivityLevel, type Gender, type HealthMetrics } from "@/lib/health-metrics";
 
 type AnswerMap = Record<string, AnswerValue>;
 
@@ -108,6 +109,8 @@ export function scoreAssessment(answers: AnswerMap, locale: Locale = "en"): Scor
   const nutritionInsight = buildNutritionInsight(sleepQuality, dietStyle, waterIntake, locale);
   if (nutritionInsight) microInsights.push(nutritionInsight);
 
+  const healthMetrics = buildHealthMetrics(answers, activityLevel);
+
   const preview = {
     headline: buildHeadline(goalFeeling, primaryGoal, locale),
     planSeed: buildPlanSeed(goalFeeling, constraints, weeklySessions),
@@ -148,8 +151,30 @@ export function scoreAssessment(answers: AnswerMap, locale: Locale = "en"): Scor
           ? ["long plank holds"]
           : []
     },
-    preview
+    preview,
+    healthMetrics
   };
+}
+
+const GENDERS: Gender[] = ["female", "male", "other"];
+
+function buildHealthMetrics(answers: AnswerMap, activityLevel: ActivityLevel): HealthMetrics | null {
+  const genderRaw = asString(answers.gender);
+  const gender = (GENDERS as string[]).includes(genderRaw) ? (genderRaw as Gender) : "other";
+  const age = asNumber(answers.age, NaN);
+  const heightCm = asNumber(answers.height_cm, NaN);
+  const weightKg = asNumber(answers.weight_kg, NaN);
+  const targetWeightKg = asNumber(answers.target_weight_kg, NaN);
+
+  if (![age, heightCm, weightKg, targetWeightKg].every((value) => Number.isFinite(value) && value > 0)) {
+    return null;
+  }
+
+  try {
+    return computeHealthMetrics({ gender, age, heightCm, weightKg, targetWeightKg, activityLevel });
+  } catch {
+    return null;
+  }
 }
 
 function buildNutritionInsight(sleepQuality: string, dietStyle: string, waterIntake: string, locale: Locale) {
