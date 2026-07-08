@@ -372,23 +372,47 @@ export function QuizExperience({ quiz }: { quiz: QuizDefinitionContract }) {
       pollRef.current = { id: job.id, startedAt: Date.now() };
     }
 
-    const timer = window.setInterval(async () => {
+    let cancelled = false;
+    let timer: number | undefined;
+    let delay = 1500;
+
+    const tick = async () => {
+      if (cancelled) return;
       // Stop polling forever if the worker never picks the job up.
       if (Date.now() - pollRef.current.startedAt > 90_000) {
-        window.clearInterval(timer);
         setTimedOut(true);
         return;
       }
-      const response = await fetch(`/api/reports/${job.id}`);
-      if (!response.ok) return;
-      const data = (await response.json()) as { job: ReportJobView };
-      setJob(data.job);
-      if (data.job.status === "SUCCEEDED" && sessionId) {
-        await loadResult(sessionId);
+      // Pause polling while the tab is hidden to avoid wasted requests.
+      if (typeof document !== "undefined" && document.hidden) {
+        timer = window.setTimeout(tick, 2000);
+        return;
       }
-    }, 1800);
+      try {
+        const response = await fetch(`/api/reports/${job.id}`);
+        if (response.ok) {
+          const data = (await response.json()) as { job: ReportJobView };
+          if (cancelled) return;
+          setJob(data.job);
+          if (data.job.status === "SUCCEEDED" && sessionId) {
+            await loadResult(sessionId);
+          }
+          if (data.job.status === "SUCCEEDED" || data.job.status === "FAILED") return;
+        }
+      } catch {
+        // transient network error - keep polling with backoff
+      }
+      // Exponential backoff capped at 8s.
+      delay = Math.min(delay * 1.5, 8000);
+      timer = window.setTimeout(tick, delay);
+    };
 
-    return () => window.clearInterval(timer);
+    timer = window.setTimeout(tick, delay);
+
+    return () => {
+      cancelled = true;
+      if (timer) window.clearTimeout(timer);
+    };
   }, [job, sessionId]);
 
   async function saveAnswer(nextValue: AnswerValue) {
@@ -427,12 +451,18 @@ export function QuizExperience({ quiz }: { quiz: QuizDefinitionContract }) {
     const data = (await response.json()) as { reportJob?: ReportJobView; error?: string };
     setSaving(false);
 
-    if (!response.ok || !data.reportJob) {
-      setError(data.error ?? t.completeError);
+    // A 502 (enqueue failure) still returns a FAILED reportJob - show it so the
+    // timeline surfaces the failure + retry instead of a generic error toast.
+    if (data.reportJob) {
+      setJob(data.reportJob);
+      if (!response.ok) setError(data.error ?? t.completeError);
       return;
     }
 
-    setJob(data.reportJob);
+    if (!response.ok) {
+      setError(data.error ?? t.completeError);
+      return;
+    }
   }
 
   async function loadResult(id: string) {
@@ -685,6 +715,9 @@ function NumberField({ question, value, onAnswer, saving }: { question: QuizQues
           max={question.max}
           value={draft}
           disabled={saving}
+          aria-label={question.title}
+          aria-invalid={outOfRange}
+          aria-describedby={`${question.id}-range`}
           onChange={(event) => setDraft(event.target.value)}
           onBlur={commit}
           onKeyDown={(event) => {
@@ -696,13 +729,13 @@ function NumberField({ question, value, onAnswer, saving }: { question: QuizQues
         {question.unit ? <span className="text-lg font-semibold text-stone-500">{question.unit}</span> : null}
       </div>
       {outOfRange ? (
-        <p className="mt-2 text-sm text-rose-600">
+        <p id={`${question.id}-range`} role="alert" className="mt-2 text-sm text-rose-600">
           {question.min}
           {" - "}
           {question.max} {question.unit}
         </p>
       ) : (
-        <p className="mt-2 text-xs text-stone-400">
+        <p id={`${question.id}-range`} className="mt-2 text-xs text-stone-400">
           {question.min} - {question.max} {question.unit}
         </p>
       )}

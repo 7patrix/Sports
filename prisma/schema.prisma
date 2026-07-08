@@ -126,6 +126,7 @@ model ReportJob {
   results   AssessmentResult[]
 
   @@index([status, createdAt])
+  @@index([sessionId, createdAt])
 }
 
 model AgentLog {
@@ -186,6 +187,7 @@ model Payment {
   entitlement Entitlement?  @relation(fields: [entitlementId], references: [id], onDelete: SetNull)
 
   @@index([entitlementId])
+  @@index([sessionId, createdAt])
 }
 
 model Entitlement {

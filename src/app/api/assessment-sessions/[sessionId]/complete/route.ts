@@ -96,7 +96,23 @@ export async function POST(_request: Request, { params }: Params) {
     });
 
     if (updated.reportJob.status === "PENDING") {
-      await enqueueAssessmentReport(sessionId, updated.reportJob.id, locale);
+      try {
+        await enqueueAssessmentReport(sessionId, updated.reportJob.id, locale);
+      } catch (enqueueError) {
+        // If the queue is unreachable the job would otherwise sit PENDING forever.
+        // Mark it FAILED so the client surfaces an error/retry immediately.
+        const failed = await prisma.reportJob.update({
+          where: { id: updated.reportJob.id },
+          data: {
+            status: "FAILED",
+            stage: "failed",
+            error: enqueueError instanceof Error ? enqueueError.message : "Failed to enqueue report job",
+            finishedAt: new Date()
+          }
+        });
+        await recordFunnelEvent("assessment_enqueue_failed", { reportJobId: failed.id }, sessionId);
+        return NextResponse.json({ ...updated, reportJob: failed }, { status: 502 });
+      }
     }
 
     await recordFunnelEvent("assessment_completed", { reportJobId: updated.reportJob.id, locale }, sessionId);

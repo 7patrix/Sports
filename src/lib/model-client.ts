@@ -56,23 +56,30 @@ type NarrativeInput = {
  * Shared low-level call to an OpenAI-compatible chat endpoint that expects a
  * JSON object back. Returns the parsed JSON (unknown) or null on any failure.
  */
-async function callChatJson(messages: ChatMessage[], temperature: number): Promise<unknown | null> {
-  const { apiKey, baseUrl, model, mock } = getAiConfig();
-  if (!apiKey || mock) return null;
+const MAX_ATTEMPTS = 2;
 
+function isRetriableStatus(status: number) {
+  return status === 429 || (status >= 500 && status <= 599);
+}
+
+async function callChatOnce(
+  messages: ChatMessage[],
+  temperature: number,
+  config: { apiKey: string; baseUrl: string; model: string }
+): Promise<{ ok: true; json: unknown } | { ok: false; retriable: boolean }> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15000);
   const dispatcher = getProxyDispatcher();
 
   try {
-    const response = await undiciFetch(`${baseUrl}/chat/completions`, {
+    const response = await undiciFetch(`${config.baseUrl}/chat/completions`, {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        authorization: `Bearer ${apiKey}`
+        authorization: `Bearer ${config.apiKey}`
       },
       body: JSON.stringify({
-        model,
+        model: config.model,
         temperature,
         response_format: { type: "json_object" },
         messages
@@ -81,20 +88,39 @@ async function callChatJson(messages: ChatMessage[], temperature: number): Promi
       dispatcher
     });
 
-    if (!response.ok) return null;
+    if (!response.ok) {
+      return { ok: false, retriable: isRetriableStatus(response.status) };
+    }
 
-    const data = (await response.json()) as {
-      choices?: { message?: { content?: string } }[];
-    };
+    const data = (await response.json()) as { choices?: { message?: { content?: string } }[] };
     const content = data.choices?.[0]?.message?.content;
-    if (!content) return null;
+    if (!content) return { ok: false, retriable: false };
 
-    return JSON.parse(content) as unknown;
+    return { ok: true, json: JSON.parse(content) as unknown };
   } catch {
-    return null;
+    // Network error / timeout / malformed JSON: treat as retriable transient failure.
+    return { ok: false, retriable: true };
   } finally {
     clearTimeout(timeout);
   }
+}
+
+/**
+ * Shared low-level call to an OpenAI-compatible chat endpoint that expects a
+ * JSON object back. Retries once on transient failures (429/5xx/network) with a
+ * short backoff. Returns the parsed JSON (unknown) or null on any final failure.
+ */
+async function callChatJson(messages: ChatMessage[], temperature: number): Promise<unknown | null> {
+  const { apiKey, baseUrl, model, mock } = getAiConfig();
+  if (!apiKey || mock) return null;
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const outcome = await callChatOnce(messages, temperature, { apiKey, baseUrl, model });
+    if (outcome.ok) return outcome.json;
+    if (!outcome.retriable || attempt === MAX_ATTEMPTS) return null;
+    await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
+  }
+  return null;
 }
 
 function buildProfileContext(input: NarrativeInput) {

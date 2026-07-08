@@ -35,24 +35,23 @@ function maskHealthMetrics(metrics: HealthMetrics | null, fullAccess: boolean) {
 export async function GET(_request: Request, { params }: Params) {
   try {
     const { sessionId } = await params;
-    const result = await prisma.assessmentResult.findFirst({
-      where: { sessionId },
-      orderBy: { createdAt: "desc" }
-    });
+
+    // Independent reads run in parallel to cut round-trips.
+    const [result, profile, session, fullAccess] = await Promise.all([
+      prisma.assessmentResult.findFirst({ where: { sessionId }, orderBy: { createdAt: "desc" } }),
+      prisma.assessmentProfile.findUnique({
+        where: { sessionId },
+        select: { scores: true, healthMetrics: true }
+      }),
+      prisma.assessmentSession.findUnique({
+        where: { id: sessionId },
+        select: { email: true, subscriptionStatus: true }
+      }),
+      hasFullAccess(sessionId)
+    ]);
 
     if (!result) return jsonError("Result is not ready yet", 404);
 
-    const profile = await prisma.assessmentProfile.findUnique({
-      where: { sessionId },
-      select: { scores: true, healthMetrics: true }
-    });
-
-    const session = await prisma.assessmentSession.findUnique({
-      where: { id: sessionId },
-      select: { email: true, subscriptionStatus: true }
-    });
-
-    const fullAccess = await hasFullAccess(sessionId);
     const metrics = (profile?.healthMetrics as HealthMetrics | null) ?? null;
 
     return NextResponse.json({
