@@ -173,6 +173,7 @@ model AssessmentResult {
 model Payment {
   id         String        @id @default(cuid())
   sessionId  String
+  entitlementId String?
   provider   String        @default("mock")
   providerRef String       @unique
   amountCents Int
@@ -182,6 +183,9 @@ model Payment {
   updatedAt  DateTime      @updatedAt
 
   session AssessmentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  entitlement Entitlement?  @relation(fields: [entitlementId], references: [id], onDelete: SetNull)
+
+  @@index([entitlementId])
 }
 
 model Entitlement {
@@ -194,6 +198,7 @@ model Entitlement {
   createdAt DateTime          @default(now())
 
   session AssessmentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  payments Payment[]
 
   @@unique([sessionId, scope])
   @@index([scope, status])

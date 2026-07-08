@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { activateSubscription } from "@/lib/subscription";
 import { recordFunnelEvent } from "@/lib/events";
+import { enforceRateLimit } from "@/lib/rate-limit";
 import { handleApiError, jsonError } from "@/lib/api";
 
 const paySchema = z.object({
@@ -21,6 +22,9 @@ const paySchema = z.object({
  */
 export async function POST(request: Request) {
   try {
+    const limited = enforceRateLimit(request, "pay", { limit: 10, windowMs: 60_000 });
+    if (limited) return limited;
+
     const { sessionId, providerRef } = paySchema.parse(await request.json());
 
     const session = await prisma.assessmentSession.findUnique({ where: { id: sessionId } });

@@ -3,6 +3,10 @@ const placeholderUrl = "postgresql://placeholder:placeholder@localhost:5432/plac
 export const dbConfigured =
   Boolean(process.env.DATABASE_URL) && process.env.DATABASE_URL !== placeholderUrl;
 
+// The /complete flow enqueues a report job on Redis (BullMQ). Tests that hit it
+// require both a DB and a reachable Redis (docker compose brings both up).
+export const redisConfigured = Boolean(process.env.REDIS_URL);
+
 export function jsonRequest(url: string, body: unknown, method = "POST"): Request {
   return new Request(url, {
     method,

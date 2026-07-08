@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Rive, { Alignment, Fit, Layout } from "@rive-app/react-canvas";
 import type { AnswerValue, QuizDefinitionContract, QuizQuestion } from "@/lib/contracts";
 import { chapterLabels, chapterOrder, localizedQuizzes } from "@/lib/quiz-definition";
@@ -105,6 +105,9 @@ const copy = {
     revealChapter: "Reveal",
     timeline: "AI timeline",
     openPreview: "Open preview",
+    jobFailed: "Report generation failed. You can retry.",
+    jobTimeout: "This is taking longer than expected. You can retry.",
+    retry: "Retry",
     timelineEmpty: "The timeline starts after your Health Twin is complete.",
     whyAsk: "Why we ask",
     personalPreview: "Personal preview",
@@ -191,6 +194,9 @@ const copy = {
     revealChapter: "\u7ed3\u679c\u9884\u89c8",
     timeline: "AI \u751f\u6210\u8fdb\u5ea6",
     openPreview: "\u6253\u5f00\u9884\u89c8",
+    jobFailed: "\u62a5\u544a\u751f\u6210\u5931\u8d25\uff0c\u4f60\u53ef\u4ee5\u91cd\u8bd5\u3002",
+    jobTimeout: "\u751f\u6210\u65f6\u95f4\u6bd4\u9884\u671f\u957f\uff0c\u4f60\u53ef\u4ee5\u91cd\u8bd5\u3002",
+    retry: "\u91cd\u8bd5",
     timelineEmpty: "\u5b8c\u6210\u6d4b\u8bc4\u540e\uff0c\u8fd9\u91cc\u4f1a\u663e\u793a\u8ba1\u5212\u751f\u6210\u8fc7\u7a0b\u3002",
     whyAsk: "\u4e3a\u4ec0\u4e48\u95ee\u8fd9\u4e2a",
     personalPreview: "\u4e2a\u6027\u5316\u9884\u89c8",
@@ -291,6 +297,8 @@ export function QuizExperience({ quiz }: { quiz: QuizDefinitionContract }) {
   const [result, setResult] = useState<ResultResponse>();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>();
+  const [timedOut, setTimedOut] = useState(false);
+  const pollRef = useRef<{ id?: string; startedAt: number }>({ startedAt: 0 });
 
   const displayQuiz = localizedQuizzes[locale] ?? quiz;
   const t = copy[locale];
@@ -348,10 +356,29 @@ export function QuizExperience({ quiz }: { quiz: QuizDefinitionContract }) {
     return () => window.clearTimeout(timer);
   }, [startSession]);
 
+  const jobIssue: "failed" | "timeout" | undefined = !job
+    ? undefined
+    : job.status === "FAILED"
+      ? "failed"
+      : job.status === "SUCCEEDED"
+        ? undefined
+        : timedOut
+          ? "timeout"
+          : undefined;
+
   useEffect(() => {
     if (!job || job.status === "SUCCEEDED" || job.status === "FAILED") return;
+    if (pollRef.current.id !== job.id) {
+      pollRef.current = { id: job.id, startedAt: Date.now() };
+    }
 
     const timer = window.setInterval(async () => {
+      // Stop polling forever if the worker never picks the job up.
+      if (Date.now() - pollRef.current.startedAt > 90_000) {
+        window.clearInterval(timer);
+        setTimedOut(true);
+        return;
+      }
       const response = await fetch(`/api/reports/${job.id}`);
       if (!response.ok) return;
       const data = (await response.json()) as { job: ReportJobView };
@@ -389,6 +416,8 @@ export function QuizExperience({ quiz }: { quiz: QuizDefinitionContract }) {
 
   async function completeAssessment() {
     if (!sessionId) return;
+    setTimedOut(false);
+    pollRef.current = { startedAt: 0 };
     setSaving(true);
     const response = await fetch(`/api/assessment-sessions/${sessionId}/complete`, {
       method: "POST",
@@ -573,6 +602,12 @@ export function QuizExperience({ quiz }: { quiz: QuizDefinitionContract }) {
               <p className="text-sm font-semibold text-stone-700">{formatStage(job.stage, locale)}</p>
               <div className="space-y-2 text-sm text-stone-600">{job.logs?.slice(-4).map((log, index) => <p key={`${log.message}-${index}`}>{log.message}</p>)}</div>
               {job.status === "SUCCEEDED" && !result ? <button className="rounded-full bg-stone-900 px-4 py-2 text-sm font-bold text-white" onClick={() => sessionId && loadResult(sessionId)}>{t.openPreview}</button> : null}
+              {jobIssue ? (
+                <div className="rounded-2xl bg-red-50 p-3 text-sm text-red-700">
+                  <p>{jobIssue === "failed" ? t.jobFailed : t.jobTimeout}</p>
+                  <button className="mt-2 rounded-full bg-red-600 px-4 py-2 text-xs font-bold text-white" onClick={completeAssessment} disabled={saving}>{t.retry}</button>
+                </div>
+              ) : null}
             </div>
           ) : (
             <p className="mt-3 text-sm text-stone-500">{t.timelineEmpty}</p>

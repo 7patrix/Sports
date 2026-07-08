@@ -26,7 +26,7 @@
 
 ### `PATCH /api/assessment-sessions/:sessionId/answers`
 
-校验并 upsert 一条答案(分步保存)。会根据题目定义校验取值:单/多选值必须在允许范围内,数字必须是有限值且在 `[min, max]` 内,刻度必须是范围内整数。非法 / 越界 / 注入值返回 `422` 且不落库。
+校验并 upsert 一条答案(分步保存)。会根据题目定义校验取值:单/多选值必须在允许范围内,数字必须是有限值且在 `[min, max]` 内,刻度必须是范围内整数。非法 / 越界 / 注入值返回 `422` 且不落库。写接口带有基础限流(按 IP 固定窗口,超限返回 `429`)。
 
 请求体:
 
@@ -39,18 +39,25 @@
 
 ### `POST /api/assessment-sessions/:sessionId/complete`
 
-校验必填答案,计算确定性画像,把会话标记为完成,创建报告任务并入队交给 worker 处理。
+校验必填答案,计算确定性画像,把会话标记为完成,创建报告任务并入队交给 worker 处理。除了逐题的单字段校验外,这里还做**跨字段合理性校验**(例如目标体重相对身高换算出的目标 BMI 必须落在 13–60 之间),不合理返回 `422` 且 `details.reason` 说明原因。重复调用是幂等的:会复用尚未完成的报告任务,不会重复建任务。
 
 ### `POST /api/assessment-sessions/:sessionId/email`
 
-采集并保存邮箱(交付价值后的身份采集)。**仅存入数据库,不发送真实邮件。**
+采集并保存邮箱(交付价值后的身份采集)。默认仅存入数据库并记录漏斗事件;若配置了 `RESEND_API_KEY` 与 `EMAIL_FROM`,则会**尽力**通过 Resend 发送一封"计划已保存"的邮件。发送失败绝不影响采集本身(优雅降级),响应中 `delivered` 表示本次是否真实发出。
 
 请求体:
 
 ```json
 {
-  "email": "user@example.com"
+  "email": "user@example.com",
+  "locale": "zh"
 }
+```
+
+响应:
+
+```json
+{ "email": "user@example.com", "delivered": false }
 ```
 
 ## 报告
@@ -85,7 +92,7 @@
 
 ### `POST /api/pay`
 
-模拟支付回调。在同一事务里把会话 `subscriptionStatus` 翻转为 `ACTIVE`、记录一条已支付 `Payment` 并发放完整计划权益。会话必须为 `COMPLETED` 状态。
+模拟支付回调。在同一事务里把会话 `subscriptionStatus` 翻转为 `ACTIVE`、记录一条已支付 `Payment`(与其开通的 `Entitlement` 相互关联)并发放完整计划权益。会话必须为 `COMPLETED` 状态。**幂等**:若会话已是激活态,重复回调不会再记一笔支付(避免重复计费),响应 `alreadyActive` 为 `true`。
 
 请求体:
 

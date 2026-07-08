@@ -115,15 +115,15 @@ async function upsertCompletedSession(quizId: string, quizVersion: number, token
   });
 
   if (paid) {
-    await prisma.payment.upsert({
-      where: { providerRef: `seed_paid_${token}` },
-      create: { sessionId: session.id, providerRef: `seed_paid_${token}`, amountCents: 1900, status: "PAID" },
-      update: { status: "PAID" }
-    });
-    await prisma.entitlement.upsert({
+    const entitlement = await prisma.entitlement.upsert({
       where: { sessionId_scope: { sessionId: session.id, scope: "assessment.full_plan" } },
       create: { sessionId: session.id, scope: "assessment.full_plan", status: "ACTIVE" },
       update: { status: "ACTIVE" }
+    });
+    await prisma.payment.upsert({
+      where: { providerRef: `seed_paid_${token}` },
+      create: { sessionId: session.id, entitlementId: entitlement.id, providerRef: `seed_paid_${token}`, amountCents: 1900, status: "PAID" },
+      update: { status: "PAID", entitlementId: entitlement.id }
     });
   } else {
     // Keep the unpaid demo reliably re-runnable: strip any prior payment/entitlement

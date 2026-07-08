@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { validateAnswer } from "@/lib/answer-validation";
+import { validateAnswer, validateBiometricConsistency } from "@/lib/answer-validation";
 import type { QuizQuestion } from "@/lib/contracts";
 
 const numberQuestion: QuizQuestion = {
@@ -97,5 +97,30 @@ describe("validateAnswer - multi", () => {
   it("rejects non-arrays and unknown members", () => {
     expect(validateAnswer(multiQuestion, "mat" as never).ok).toBe(false);
     expect(validateAnswer(multiQuestion, ["mat", "rocket"]).ok).toBe(false);
+  });
+});
+
+describe("validateBiometricConsistency", () => {
+  it("accepts a plausible height/target-weight combination", () => {
+    expect(validateBiometricConsistency({ height_cm: 168, target_weight_kg: 63 }).ok).toBe(true);
+  });
+
+  it("accepts string-encoded numbers", () => {
+    expect(validateBiometricConsistency({ height_cm: "170", target_weight_kg: "65" }).ok).toBe(true);
+  });
+
+  it("rejects an absurdly low target BMI even when each field is in range", () => {
+    // 35kg at 230cm -> BMI ~6.6
+    expect(validateBiometricConsistency({ height_cm: 230, target_weight_kg: 35 }).ok).toBe(false);
+  });
+
+  it("rejects an absurdly high target BMI", () => {
+    // 250kg at 120cm -> BMI ~173
+    expect(validateBiometricConsistency({ height_cm: 120, target_weight_kg: 250 }).ok).toBe(false);
+  });
+
+  it("skips the cross-check when a field is missing", () => {
+    expect(validateBiometricConsistency({ height_cm: 168 }).ok).toBe(true);
+    expect(validateBiometricConsistency({}).ok).toBe(true);
   });
 });

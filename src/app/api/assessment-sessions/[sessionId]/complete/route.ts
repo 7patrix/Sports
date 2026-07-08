@@ -5,6 +5,7 @@ import { enqueueAssessmentReport } from "@/lib/queue";
 import { recordFunnelEvent } from "@/lib/events";
 import { activeQuiz } from "@/lib/quiz-definition";
 import { scoreAssessment } from "@/lib/scoring";
+import { validateBiometricConsistency } from "@/lib/answer-validation";
 import { parseLocale } from "@/lib/locale";
 import { handleApiError, jsonError } from "@/lib/api";
 
@@ -38,6 +39,12 @@ export async function POST(_request: Request, { params }: Params) {
     const answerMap = Object.fromEntries(
       session.answers.map((answer) => [answer.questionId, answer.value])
     ) as Record<string, AnswerValue>;
+
+    const consistency = validateBiometricConsistency(answerMap);
+    if (!consistency.ok) {
+      return jsonError("Inconsistent biometric answers", 422, { reason: consistency.error });
+    }
+
     const profile = scoreAssessment(answerMap, locale);
 
     const updated = await prisma.$transaction(async (tx) => {

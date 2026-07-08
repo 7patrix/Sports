@@ -1,5 +1,43 @@
 import type { AnswerValue, QuizQuestion } from "@/lib/contracts";
 
+type AnswerMap = Record<string, AnswerValue>;
+
+// A goal weight is only meaningful if it maps to a plausible target BMI. This
+// blocks "each field is in range but the combination is absurd" inputs (e.g.
+// target 40kg at 190cm -> BMI 11) that single-field validation cannot catch.
+const MIN_TARGET_BMI = 13;
+const MAX_TARGET_BMI = 60;
+
+function numberFrom(value: AnswerValue | undefined): number | null {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+export function validateBiometricConsistency(answers: AnswerMap): AnswerValidationResult {
+  const heightCm = numberFrom(answers.height_cm);
+  const targetWeightKg = numberFrom(answers.target_weight_kg);
+
+  // Only cross-check when both fields are present; per-field range is enforced
+  // separately on save.
+  if (heightCm === null || targetWeightKg === null) {
+    return { ok: true, value: true };
+  }
+
+  const heightM = heightCm / 100;
+  const targetBmi = targetWeightKg / (heightM * heightM);
+  if (targetBmi < MIN_TARGET_BMI || targetBmi > MAX_TARGET_BMI) {
+    return {
+      ok: false,
+      error: `target weight is not plausible for the given height (target BMI ${targetBmi.toFixed(1)})`
+    };
+  }
+  return { ok: true, value: true };
+}
+
 export type AnswerValidationResult =
   | { ok: true; value: AnswerValue }
   | { ok: false; error: string };

@@ -90,27 +90,33 @@ curl -s $APP/api/results/$PSID | jq '{access, healthMetrics}'
 npm run typecheck
 npm run lint
 npm test                   # 单元测试(无需外部依赖)
-npm run test:integration   # 集成测试(需要运行中的 Postgres)
+npm run test:coverage      # 单元测试 + 覆盖率报告
+npm run test:integration   # 集成测试(需要运行中的 Postgres + Redis)
 npm run build
 ```
 
-`npm run test:all` 会同时跑两套测试。CI(`.github/workflows/ci.yml`)在每次 push/PR 时用一个 Postgres service 跑:typecheck、lint、单元测试、迁移、集成测试、构建。
+`npm run test:all` 会同时跑两套测试。CI(`.github/workflows/ci.yml`)在每次 push/PR 时用 Postgres + Redis 两个 service 跑:typecheck、lint、单元测试、迁移、集成测试、构建。
 
 ## 测试覆盖 —— 测了什么、为什么、以及没测什么
 
+当前规模:**33 个单元 + 17 个集成**用例。`npm run test:coverage` 可输出覆盖率报告(核心算法 `health-metrics.ts` 语句覆盖约 95%,`answer-validation.ts` 约 87%)。
+
 **单元测试(`npm test`,无需外部依赖):**
 - `health-metrics.test.ts` —— 评估算法本身:BMI/BMR/TDEE 计算、减脂/增重/维持分支、热量下限、达标日期预测、身高/体重边界、极端体重差(封顶),以及**非法(NaN / 非正数 / Infinity)输入**。
-- `answer-validation.test.ts` —— 服务端输入防护:越界数值、非数字注入(如 `"70; DROP TABLE"`、`{$gt:0}`)、非法选项值、非整数刻度、多选去重。
+- `answer-validation.test.ts` —— 服务端输入防护:越界数值、非数字注入(如 `"70; DROP TABLE"`、`{$gt:0}`)、非法选项值、非整数刻度、多选去重,以及**跨字段合理性校验**(目标体重相对身高的目标 BMI 边界)。
 - `scoring.test.ts` —— 确定性打分,含疼痛/睡眠/营养信号。
 - `report-generator.test.ts` —— schema 合法的 4 周计划 + 安全免责声明 + 约束传播。
+- `rate-limit.test.ts` —— 固定窗口限流器:窗口内放行、超限阻断并给出 retry-after、窗口过期后重置、按 key 独立计数。
 
-**集成测试(`npm run test:integration`,真实 Postgres):**
+**集成测试(`npm run test:integration`,真实 Postgres + Redis):**
 - `step-save.test.ts` —— 增量保存、`currentStep` 推进、**按 token 恢复**、**乱序**与**重复**提交(幂等 upsert)、**并发更新**(单条一致记录),以及**越界/注入返回 422** 且不落库。
-- `subscription.test.ts` —— 端到端的 **脱敏 → /pay → 完整** 转变、数据库 `subscriptionStatus` 翻转、以及对不存在会话支付返回 404。
+- `complete.test.ts` —— 完成流程:**缺答案返回 422 + missing 列表**、**跨字段不合理返回 422**、正常完成落库画像/健康指标并入队报告任务、**重复完成幂等**(复用同一任务)。
+- `subscription.test.ts` —— 端到端的 **脱敏 → /pay → 完整** 转变、数据库 `subscriptionStatus` 翻转、对不存在会话支付返回 404,以及 **/pay 幂等**(重复回调不重复计费,且 Payment 关联到 Entitlement)。
+- `email-results.test.ts` —— 邮箱采集落库与 delivered 状态、非法邮箱返回 422、结果未就绪返回 404。
 
 **为什么测这些:** 它们正好命中评分表关注的五点 —— API 设计、数据建模、持久化/状态一致性、订阅与支付闭环,以及边界/异常覆盖。
 
-**没测什么(及原因):** BullMQ worker 的真实 LLM 路径没有在 CI 中断言 —— 报告 writer 有确定性兜底,安全审查已通过 `report-generator` 覆盖,因此集成测试直接写入 `AssessmentResult`,以避免在 CI 中引入 Redis/LLM 依赖。UI 采用人工冒烟测试(挑战明确表示 UI 不在考查范围)。Playwright 脚本已搭好骨架(`npm run test:e2e`)但未纳入 CI。
+**没测什么(及原因):** BullMQ worker 的真实 LLM 路径没有在 CI 中断言 —— 报告 writer 有确定性兜底,安全审查已通过 `report-generator` 覆盖,因此集成测试只断言任务已入队,不依赖真实 LLM 产出,以避免在 CI 中引入 LLM 网络依赖。UI 采用人工冒烟测试(挑战明确表示 UI 不在考查范围)。Playwright 脚本已搭好骨架(`npm run test:e2e`)但未纳入 CI。
 
 ## 数据库 Schema
 
@@ -124,6 +130,7 @@ erDiagram
   AssessmentSession ||--o{ Payment : pays
   AssessmentSession ||--o{ Entitlement : grants
   AssessmentSession ||--o{ FunnelEvent : emits
+  Entitlement ||--o{ Payment : "granted by"
   ReportJob ||--o{ AgentLog : logs
   ReportJob ||--o{ ReportArtifact : versions
   ReportJob ||--o{ AssessmentResult : yields
@@ -160,7 +167,9 @@ erDiagram
   }
   Payment {
     string sessionId FK
+    string entitlementId FK
     string providerRef UK
+    int    amountCents
     enum   status
   }
 ```

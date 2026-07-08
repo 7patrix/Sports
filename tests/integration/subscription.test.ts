@@ -145,4 +145,22 @@ suite("subscription gating + pay callback", () => {
     const response = await pay(jsonRequest("http://test/api/pay", { sessionId: "does-not-exist" }));
     expect((response as Response).status).toBe(404);
   });
+
+  it("is idempotent: a replayed pay callback does not double-charge", async () => {
+    const sessionId = await buildCompletedSession();
+
+    const first = await pay(jsonRequest("http://test/api/pay", { sessionId }));
+    const firstData = await readJson<{ alreadyActive: boolean }>(first as Response);
+    expect(firstData.alreadyActive).toBe(false);
+
+    const second = await pay(jsonRequest("http://test/api/pay", { sessionId }));
+    expect((second as Response).status).toBe(200);
+    const secondData = await readJson<{ alreadyActive: boolean }>(second as Response);
+    expect(secondData.alreadyActive).toBe(true);
+
+    // Exactly one PAID payment row despite two callbacks, linked to the entitlement.
+    const payments = await prisma.payment.findMany({ where: { sessionId, status: "PAID" } });
+    expect(payments).toHaveLength(1);
+    expect(payments[0].entitlementId).toBeTruthy();
+  });
 });

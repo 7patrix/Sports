@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { recordFunnelEvent } from "@/lib/events";
 import { activeQuiz } from "@/lib/quiz-definition";
 import { validateAnswer } from "@/lib/answer-validation";
+import { enforceRateLimit } from "@/lib/rate-limit";
 import { handleApiError, jsonError } from "@/lib/api";
 
 type Params = {
@@ -13,6 +14,9 @@ type Params = {
 
 export async function PATCH(request: Request, { params }: Params) {
   try {
+    const limited = enforceRateLimit(request, "answers", { limit: 120, windowMs: 60_000 });
+    if (limited) return limited;
+
     const { sessionId } = await params;
     const input = answerInputSchema.parse(await request.json());
     const questionIndex = activeQuiz.questions.findIndex((question) => question.id === input.questionId);
