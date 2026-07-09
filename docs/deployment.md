@@ -72,8 +72,4 @@ docker run --env-file .env health-funnel-worker
 
 `GET /api/health` 校验 Postgres 和 Redis 连通性,任一不可用时返回 503。把平台的健康检查指向这个路由即可。
 
-## 常见问题
 
-- **网站需要我本地开着电脑吗?** 不需要。线上站点跑在 Railway 的云服务器上,和你本地的电脑、docker 无关。你关机它照样在线。
-- **本地那套(docker compose、npm run dev)是干嘛的?** 只用于本地开发和跑测试,不影响线上。
-- **什么情况下线上会打不开?** Railway 服务被手动暂停/删除、免费额度用尽导致休眠、或环境变量/数据库配置被改错。保持服务处于运行状态、账户额度充足即可长期在线。

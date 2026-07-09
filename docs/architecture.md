@@ -20,7 +20,7 @@ flowchart TD
 
 ## 设计原则
 
-- **后端优先:** 挑战考查的是 API 设计、数据建模、流程闭环、测试和质量担当。
+- **后端优先:** 项目重点放在 API 设计、数据建模、流程闭环、测试覆盖和质量担当上。
 - **先确定性,后 AI:** 打分和约束在 writer 步骤之前就算好,因此安全和测试不依赖模型输出。
 - **版本化产物:** 报告任务会产出 `health-profile`、`workout-plan`、`safety-review` 等产物。
 - **鉴权边界:** 完整内容的访问权由 `Entitlement(scope="assessment.full_plan")` 加会话的 `subscriptionStatus` 控制;脱敏发生在服务端 `GET /api/results/:id`(绝不只在前端做)。

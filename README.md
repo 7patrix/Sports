@@ -3,9 +3,9 @@
 
 这不是一个简单的表单应用,而是一套 BetterMe/Noom 式健康漏斗的核心基础设施:版本化问卷、可恢复的匿名会话、服务端健康评估算法(BMI、热量目标、达标日期)、确定性打分、带独立安全审查的异步 AI 报告生成、模拟支付回调、按订阅分级的结果、埋点分析,以及完整的单元 + 集成测试和 CI。
 
-## 与挑战要求的对应关系
+## 交付要求对应关系
 
-| 挑战要求 | 实现位置 |
+| 要求 | 实现位置 |
 | --- | --- |
 | 分步保存 | `PATCH /api/assessment-sessions/:id/answers` |
 | 进度恢复 | 匿名 token → `POST /api/assessment-sessions`、`GET /api/assessment-sessions/:id` |
@@ -53,7 +53,7 @@ Docker 把 Postgres 映射到 `localhost:55432`、Redis 映射到 `localhost:563
 
 非会员拿到的是脱敏结果:BMI 作为钩子展示,但 **热量目标、三大营养素、达标日期、每周预测曲线以及完整 4 周计划都在服务端被剥离**,并标记为 `locked`。`/api/pay` 回调会在同一个事务里把会话的 `subscriptionStatus` 翻转为 `ACTIVE`、记录一条已支付 `Payment` 并发放 `assessment.full_plan` 权益。此后结果接口即返回完整、解锁的内容。
 
-### 评审流程(cURL)
+### 验证流程(cURL)
 
 seed 会创建一个稳定的**未支付**会话(token `demo-health-twin-unpaid`)和一个**已支付**会话(token `demo-health-twin-token`)。先用 token 换出 `sessionId`,再对比支付前后的差异:
 
@@ -113,9 +113,9 @@ npm run build
 - `subscription.test.ts` —— 端到端的 **脱敏 → /pay → 完整** 转变、数据库 `subscriptionStatus` 翻转、对不存在会话支付返回 404,以及 **/pay 幂等**(重复回调不重复计费,且 Payment 关联到 Entitlement)。
 - `email-results.test.ts` —— 邮箱采集落库与 delivered 状态、非法邮箱返回 422、结果未就绪返回 404。
 
-**E2E 冒烟(`npm run test:e2e`,Playwright,已纳入 CI):** 启动生产构建,校验落地页渲染、SEO 标题、中英文切换、以及审阅者用的重置/示例填充控件。
+**E2E 冒烟(`npm run test:e2e`,Playwright,已纳入 CI):** 启动生产构建,校验落地页渲染、SEO 标题、中英文切换,以及演示辅助的重置/示例填充控件。
 
-**为什么测这些:** 它们正好命中评分表关注的五点 —— API 设计、数据建模、持久化/状态一致性、订阅与支付闭环,以及边界/异常覆盖。
+**为什么测这些:** 它们覆盖 API 设计、数据建模、持久化/状态一致性、订阅与支付闭环,以及边界/异常处理这些关键质量目标。
 
 **没测什么(及原因):** BullMQ worker 的**真实 LLM 产出**没有在 CI 中断言(writer 有确定性兜底,安全审查逻辑已由 `report-generator` 覆盖),集成测试只断言任务已入队,worker 处理器逻辑由上面的单测覆盖 —— 以避免在 CI 中引入 LLM 网络依赖。完整"填完问卷 → 支付 → 解锁"的浏览器级 e2e 未做(该闭环已由集成测试覆盖),e2e 仅做落地页冒烟。
 
